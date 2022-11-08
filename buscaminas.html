@@ -1,0 +1,321 @@
+<html>
+<head>
+<meta charset="utf-8"></meta>
+<title>Buscaminas</title>
+<style>
+body
+{
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+h1
+{
+	margin: 0 0 8px 0;
+	font-family: sans-serif;
+	text-align: center;
+}
+#field
+{
+	box-shadow: 0px 0px 6px #004080 inset;
+	padding: 8px;
+}
+.mineGrid
+{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	user-select: none;
+}
+.mineRow
+{
+	display: flex;
+}
+.mineCell
+{
+	width: 32px;
+	min-width: 32px;
+	max-width: 32px;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+	box-shadow: -1px -1px #d0d0d0 inset;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 20px;
+	font-family: monospace;
+	font-weight: bold;
+	background-color: #e0e0e0;
+}
+.covered
+{
+	box-shadow: -1px -1px #909090 inset, 1px 1px #ffffff inset;
+}
+.covered:hover
+{
+	box-shadow: -1px -1px 2px #7070a0 inset, 1px 1px 2px #f0f0ff inset;
+	background-color: #c0d8f0;
+}
+.covered:active
+{
+	box-shadow: 1px 1px #909090 inset, -1px -1px #ffffff inset;
+	
+	box-shadow: 1px 1px 2px #7070a0 inset, -1px -1px 2px #f0f0ff inset;
+	background-color: #c8e0f8;
+}
+.mine
+{
+	background-image: url('mine.svg');
+	background-size: contain;
+}
+.clickedMine
+{
+	background-image: url('mine2.svg');
+	background-size: contain;
+}
+.count1{color: #0000c0;}
+.count2{color: #00c000;}
+.count3{color: #d00000;}
+.count4{color: #c000c0;}
+.count5{color: #800000;}
+.count6{color: #00a0a0;}
+.count7{color: #000000;}
+.count8{color: #707070;}
+</style>
+<script>
+function get(elem)
+{
+	if(!(elem instanceof Element))
+		elem = document.getElementById(elem);
+	return elem;
+}
+function clear(elem)
+{
+	elem = get(elem);
+	if(elem == null)
+		return null;
+	while(elem.lastChild)
+		elem.removeChild(elem.lastChild);
+	return elem;
+}
+function del(elem)
+{
+	elem = get(elem);
+	if(elem == null)
+		return null;
+	return elem.parentNode.removeChild(elem);
+}
+function obj(tag, className = null, id = null)
+{
+	let elem = document.createElement(tag);
+	if(typeof className == 'string')
+		className = className.split(' ');
+	if(Array.isArray(className))
+		for(cls of className)
+			elem.classList.add(cls);
+	if(id != null)
+		elem.id = id;
+	return elem;
+}
+function rnd(min, max, isInt = true)
+{
+	if(min > max)
+	{
+		let tmp = min;
+		min = max;
+		max = min;
+	}
+	let range = max - min;
+	let ret = Math.random() * range + min;
+	if(isInt)
+		ret = Math.round(ret);
+	return ret;
+}
+class Field
+{
+	constructor(width, height, mines)
+	{
+		this.createField(width, height);
+		if(mines == -1)
+			mines = Math.floor(this.total / 6);
+		this.mines = Math.max(Math.min(mines, this.total - 2), 1);
+	}
+	createField(width, height)
+	{
+		this.state = Field.ST_NO;
+		this.width = Math.max(Math.min(width, 256), 2);
+		this.height = Math.max(Math.min(height, 256), 2);
+		this.total = this.width * this.height;
+		this.covered = this.total;
+		
+		this.field = obj('div', 'mineGrid');
+		this.grid = [];
+		for(let j = 0; j < this.height; j++)
+		{
+			let row = obj('div', 'mineRow');
+			this.field.appendChild(row);
+			this.grid.push([]);
+			for(let i = 0; i < this.width; i++)
+			{
+				let cell = obj('div', 'mineCell');
+				row.appendChild(cell);
+				cell.addEventListener('click', ()=>{this.click(i,j);});
+				cell.classList.add('covered');
+				this.grid[j].push({val:Field.COVERED,cell:cell});
+			}
+		}
+	}
+	placeMines(startX, startY)
+	{
+		startX = Math.max(Math.min(startX, this.width - 1), 0);
+		startY = Math.max(Math.min(startY, this.height - 1), 0);
+		
+		let possiblePositions = [];
+		for(let i = 0; i < this.total; i++)
+			possiblePositions.push(i);
+		possiblePositions.splice(startY * this.width + startX, 1);
+		for(let i = 0; i < this.mines; i++)
+		{
+			let idx = rnd(0, possiblePositions.length - 1);
+			let cellNul = possiblePositions[idx];
+			possiblePositions.splice(idx, 1);
+			let x = cellNul % this.width;
+			let y = Math.floor(cellNul / this.width);
+			this.grid[y][x].val |= Field.MINE;
+		}
+	}
+	placeNumbers()
+	{
+		for(let j = 0; j < this.height; j++)
+			for(let i = 0; i < this.width; i++)
+			{
+				if(this.grid[j][i].val & Field.MINE)
+					continue;
+				let count = 0;
+				for(let y = j - 1; y <= j + 1; y++)
+					for(let x = i - 1; x <= i + 1; x++)
+						if(x >= 0 && y >= 0 && x < this.width && y < this.height && (x != i || y != j) && (this.grid[y][x].val & Field.MINE))
+							count++;
+				this.grid[j][i].val |= count;
+			}
+	}
+	finish(x, y, win)
+	{
+		this.state = win ? Field.ST_WON : Field.ST_LOST;
+		for(let j = 0; j < this.height; j++)
+			for(let i = 0; i < this.width; i++)
+			{
+				if(!(this.grid[j][i].val & Field.COVERED))
+					continue;
+				this.grid[j][i].val |= Field.COVERED;
+				this.grid[j][i].cell.classList.remove('covered');
+				if(this.grid[j][i].val & Field.MINE)
+				{
+					let cls;
+					if(!win && i === x && j === y)
+						cls = 'clickedMine';
+					else
+						cls = 'mine';
+					this.grid[j][i].cell.classList.add(cls);
+				}
+				else
+				{
+					let count = this.grid[j][i].val & Field.M_NUM;
+					this.grid[j][i].cell.classList.add('count' + count);
+					if(count)
+						this.grid[j][i].cell.textContent = count;
+				}
+			}
+		this.covered = 0;
+	}
+	lose(x, y)
+	{
+		this.finish(x, y, false);
+		alert('Juego perdido.');
+	}
+	win()
+	{
+		this.finish(0, 0, true);
+		alert('--------\n\nJuego ganado.\n\n--------');
+	}
+	reveal(x, y)
+	{
+		if(x < 0 || y < 0 || x >= this.width || y >= this.height)
+			return;
+		if(!(this.grid[y][x].val & Field.COVERED))
+			return;
+		if(this.grid[y][x].val & Field.MINE)
+			return;
+		this.grid[y][x].val ^= Field.COVERED;
+		this.grid[y][x].cell.classList.remove('covered');
+		let count = this.grid[y][x].val & Field.M_NUM;
+		this.grid[y][x].cell.classList.add('count' + count);
+		this.covered--;
+		if(count)
+			this.grid[y][x].cell.textContent = count;
+		else
+		{
+			this.reveal(x - 1, y);
+			this.reveal(x + 1, y);
+			this.reveal(x, y - 1);
+			this.reveal(x, y + 1);
+			this.reveal(x - 1, y - 1);
+			this.reveal(x + 1, y - 1);
+			this.reveal(x - 1, y + 1);
+			this.reveal(x + 1, y + 1);
+		}
+	}
+	click(x, y)
+	{
+		if(x < 0 || y < 0 || x >= this.width || y >= this.height)
+			return;
+		if(this.state === Field.ST_NO)
+		{
+			this.placeMines(x, y);
+			this.placeNumbers();
+			this.state = Field.ST_PLAYING;
+		}
+		if(this.state !== Field.ST_PLAYING)
+			return;
+		if(this.grid[y][x].val & Field.MINE)
+			this.lose(x, y);
+		else
+			this.reveal(x, y);
+		if(this.covered === this.mines)
+			this.win();
+	}
+};
+// constantes para el estado del juego
+Field.ST_NO      = 0; // no se ha empezado
+Field.ST_PLAYING = 1; // se está jugando
+Field.ST_WON     = 2; // se ha ganado el juego
+Field.ST_LOST    = 3; // se ha perdido el juego
+// constantes para las casillas
+// bits 0..3 = número de minas alrededor
+// bit 4     = la casilla tiene mina
+// bit 5     = la casilla está cubierta
+Field.EMPTY   = 0x00;
+Field.MINE    = 0x10;
+Field.COVERED = 0x20;
+Field.M_NUM   = 0x0f;
+
+let field;
+function newGame()
+{
+	field = new Field(20, 20, -1);
+	clear('field').appendChild(field.field);
+}
+function bodyOnLoad()
+{
+	newGame();
+	
+}
+</script>
+</head>
+<body onload="bodyOnLoad()">
+<h1>Buscaminas</h1>
+<button onclick="newGame()">Nueva partida</button>
+<div id="field"></div>
+</body>
+</html>
