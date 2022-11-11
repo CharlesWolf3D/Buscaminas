@@ -47,10 +47,13 @@ h1
 	font-family: monospace;
 	font-weight: bold;
 	background-color: #e0e0e0;
+	cursor: default;
+	background-size: contain;
 }
 .covered
 {
 	box-shadow: -1px -1px #909090 inset, 1px 1px #ffffff inset;
+	cursor: pointer;
 }
 .covered:hover
 {
@@ -67,12 +70,18 @@ h1
 .mine
 {
 	background-image: url('mine.svg');
-	background-size: contain;
 }
 .clickedMine
 {
 	background-image: url('mine2.svg');
-	background-size: contain;
+}
+.question
+{
+	background-image: url('question.svg');
+}
+.flag
+{
+	background-image: url('flag.svg');
 }
 .count1{color: #0000c0;}
 .count2{color: #00c000;}
@@ -161,6 +170,8 @@ class Field
 				let cell = obj('div', 'mineCell');
 				row.appendChild(cell);
 				cell.addEventListener('click', ()=>{this.click(i,j);});
+				cell.addEventListener('mousedown', (e)=>{this.mouseDown(e,i,j);});
+				cell.addEventListener('contextmenu', (e)=>{e.preventDefault();});
 				cell.classList.add('covered');
 				this.grid[j].push({val:Field.COVERED,cell:cell});
 			}
@@ -206,26 +217,42 @@ class Field
 		for(let j = 0; j < this.height; j++)
 			for(let i = 0; i < this.width; i++)
 			{
-				if(!(this.grid[j][i].val & Field.COVERED))
+				let val = this.grid[j][i].val;
+				if(!(val & Field.COVERED))
 					continue;
-				this.grid[j][i].val |= Field.COVERED;
-				this.grid[j][i].cell.classList.remove('covered');
-				if(this.grid[j][i].val & Field.MINE)
+				let cell = this.grid[j][i].cell;
+				val ^= Field.COVERED;
+				cell.classList.remove('covered');
+				switch(val & Field.M_STATE)
+				{
+				case Field.FLAG:
+					val ^= Field.FLAG;
+					val |= Field.NORMAL;
+					cell.classList.remove('flag');
+					break;
+				case Field.QUESTION:
+					val ^= Field.QUESTION;
+					val |= Field.NORMAL;
+					cell.classList.remove('question');
+					break;
+				}
+				if(val & Field.MINE)
 				{
 					let cls;
 					if(!win && i === x && j === y)
 						cls = 'clickedMine';
 					else
 						cls = 'mine';
-					this.grid[j][i].cell.classList.add(cls);
+					cell.classList.add(cls);
 				}
 				else
 				{
-					let count = this.grid[j][i].val & Field.M_NUM;
-					this.grid[j][i].cell.classList.add('count' + count);
+					let count = val & Field.M_NUM;
+					cell.classList.add('count' + count);
 					if(count)
-						this.grid[j][i].cell.textContent = count;
+						cell.textContent = count;
 				}
+				this.grid[j][i].val = val;
 			}
 		this.covered = 0;
 	}
@@ -278,12 +305,55 @@ class Field
 		}
 		if(this.state !== Field.ST_PLAYING)
 			return;
-		if(this.grid[y][x].val & Field.MINE)
+		let val = this.grid[y][x].val;
+		switch(val & Field.M_STATE)
+		{
+		case Field.FLAG:
+			return;
+		case Field.QUESTION:
+			val ^= Field.QUESTION;
+			val |= Field.NORMAL;
+			this.grid[y][x].cell.classList.remove('question');
+			break;
+		}
+		this.grid[y][x].val = val;
+		if(val & Field.MINE)
 			this.lose(x, y);
 		else
 			this.reveal(x, y);
 		if(this.covered === this.mines)
 			this.win();
+	}
+	mouseDown(e, x, y)
+	{
+		if(e.button != 2)
+			return;
+		if(x < 0 || y < 0 || x >= this.width || y >= this.height)
+			return;
+		let val = this.grid[y][x].val;
+		if(!(val & Field.COVERED))
+			return;
+		let cell = this.grid[y][x].cell;
+		switch(val & Field.M_STATE)
+		{
+		case Field.NORMAL:
+			val ^= Field.NORMAL;
+			val |= Field.FLAG;
+			cell.classList.add('flag');
+			break;
+		case Field.FLAG:
+			val ^= Field.FLAG;
+			val |= Field.QUESTION;
+			cell.classList.remove('flag');
+			cell.classList.add('question');
+			break;
+		case Field.QUESTION:
+			val ^= Field.QUESTION;
+			val |= Field.NORMAL;
+			cell.classList.remove('question');
+			break;
+		}
+		this.grid[y][x].val = val;
 	}
 };
 // constantes para el estado del juego
@@ -295,10 +365,15 @@ Field.ST_LOST    = 3; // se ha perdido el juego
 // bits 0..3 = número de minas alrededor
 // bit 4     = la casilla tiene mina
 // bit 5     = la casilla está cubierta
-Field.EMPTY   = 0x00;
-Field.MINE    = 0x10;
-Field.COVERED = 0x20;
-Field.M_NUM   = 0x0f;
+// bits 6..7 = 0: normal, 1: bandera, 2: interrogación
+Field.EMPTY    = 0x00;
+Field.MINE     = 0x10;
+Field.COVERED  = 0x20;
+Field.M_NUM    = 0x0f;
+Field.NORMAL   = 0x00;
+Field.FLAG     = 0x40;
+Field.QUESTION = 0x80;
+Field.M_STATE  = 0xc0;
 
 let field;
 function newGame()
