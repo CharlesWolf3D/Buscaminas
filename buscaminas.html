@@ -55,12 +55,12 @@ h1
 	box-shadow: -1px -1px #909090 inset, 1px 1px #ffffff inset;
 	cursor: pointer;
 }
-.covered:hover
+.covered:hover:not(.flag)
 {
 	box-shadow: -1px -1px 2px #7070a0 inset, 1px 1px 2px #f0f0ff inset;
 	background-color: #c0d8f0;
 }
-.covered:active
+.covered:active:not(.flag)
 {
 	box-shadow: 1px 1px #909090 inset, -1px -1px #ffffff inset;
 	
@@ -270,17 +270,33 @@ class Field
 	{
 		if(x < 0 || y < 0 || x >= this.width || y >= this.height)
 			return;
-		if(!(this.grid[y][x].val & Field.COVERED))
+		let val = this.grid[y][x].val;
+		if(!(val & Field.COVERED))
 			return;
-		if(this.grid[y][x].val & Field.MINE)
+		if(val & Field.MINE)
 			return;
-		this.grid[y][x].val ^= Field.COVERED;
-		this.grid[y][x].cell.classList.remove('covered');
-		let count = this.grid[y][x].val & Field.M_NUM;
-		this.grid[y][x].cell.classList.add('count' + count);
+		val ^= Field.COVERED;
+		let cell = this.grid[y][x].cell;
+		cell.classList.remove('covered');
+		let count = val & Field.M_NUM;
+		cell.classList.add('count' + count);
 		this.covered--;
+		switch(val & Field.M_STATE)
+		{
+		case Field.FLAG:
+			val ^= Field.FLAG;
+			val |= Field.NORMAL;
+			cell.classList.remove('flag');
+			break;
+		case Field.QUESTION:
+			val ^= Field.QUESTION;
+			val |= Field.NORMAL;
+			cell.classList.remove('question');
+			break;
+		}
+		this.grid[y][x].val = val;
 		if(count)
-			this.grid[y][x].cell.textContent = count;
+			cell.textContent = count;
 		else
 		{
 			this.reveal(x - 1, y);
@@ -306,17 +322,6 @@ class Field
 		if(this.state !== Field.ST_PLAYING)
 			return;
 		let val = this.grid[y][x].val;
-		switch(val & Field.M_STATE)
-		{
-		case Field.FLAG:
-			return;
-		case Field.QUESTION:
-			val ^= Field.QUESTION;
-			val |= Field.NORMAL;
-			this.grid[y][x].cell.classList.remove('question');
-			break;
-		}
-		this.grid[y][x].val = val;
 		if(val & Field.MINE)
 			this.lose(x, y);
 		else
